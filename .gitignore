@@ -4,6 +4,6 @@
 *.shx
 
 input/
-output/
+out/
 
 .venv/
