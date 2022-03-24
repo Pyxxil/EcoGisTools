@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 from __future__ import annotations
 from itertools import starmap
 import re
@@ -7,14 +9,13 @@ import os
 import shutil
 import argparse
 from math import ceil, floor
+from pathlib import Path
 
 from tqdm import tqdm, trange
 from osgeo import ogr, gdal
 from qgis.core import QgsProject, QgsVectorLayer, QgsApplication
 
-from memory_profiler import memory_usage
-
-LOGGER_NAME = "ecogis"
+ECOGIS_LOGGER = "ecogis"
 # `None` is basically the same as `False`, just doesn't enable it if the output isn't a TTY
 DISABLE_PROGRESS = None
 
@@ -28,7 +29,7 @@ class Partition:
 
     def layer_names(self) -> List[str]:
         if self.layer is None:
-            logging.getLogger(LOGGER_NAME).error(
+            logging.getLogger(ECOGIS_LOGGER).error(
                 "Tried to partition a layer without setting it"
             )
             return []
@@ -38,10 +39,10 @@ class Partition:
 
     def __call__(self) -> Iterable[Tuple[str, ogr.Feature]]:
         if self.layer is None:
-            logging.getLogger(LOGGER_NAME).error(
+            logging.getLogger(ECOGIS_LOGGER).error(
                 "Tried to partition a layer without setting it"
             )
-            yield None
+            yield (None, None)
             return
 
         for fidx in range(self.layer.GetFeatureCount()):
@@ -60,7 +61,7 @@ class LatLonPartition(Partition):
 
     def create_partitions(self):
         if self.layer is None:
-            logging.getLogger(LOGGER_NAME).error(
+            logging.getLogger(ECOGIS_LOGGER).error(
                 "Tried to partition a layer without setting it"
             )
             return
@@ -108,7 +109,7 @@ class LatLonPartition(Partition):
     def __call__(self) -> Iterable[Tuple[str, ogr.Feature]]:
         self.create_partitions()
 
-        logger = logging.getLogger(LOGGER_NAME)
+        logger = logging.getLogger(ECOGIS_LOGGER)
         for fidx in range(self.layer.GetFeatureCount()):
             feature: ogr.Feature = self.layer.GetFeature(fidx)
             geometry: ogr.Geometry = feature.GetGeometryRef()
@@ -201,12 +202,12 @@ class Source:
         return partitions
 
 
-file_regex = re.compile(".+\.(shp|fgb)$")
+shape_file_regex = re.compile(".+\.(shp|fgb)$")
 
 
 def main(**kwargs) -> None:
-    logger = logging.getLogger(LOGGER_NAME)
-    logger.info("Loading all shapefiles ...")
+    logger = logging.getLogger(ECOGIS_LOGGER)
+    logger.info("Finding shapefiles ...")
 
     indir = kwargs.pop("indir", "input")
     outdir = kwargs.pop("outdir", "out")
@@ -228,8 +229,8 @@ def main(**kwargs) -> None:
 
     for path, _, files in os.walk(indir):
         for file in files:
-            if file_regex.fullmatch(file):
-                name = os.path.join(outdir, file[:-4])
+            if shape_file_regex.fullmatch(file):
+                name = os.path.join(outdir, Path(file).stem)
                 shapefiles.append((os.path.join(path, file), name))
 
     logger.info("Done!")
@@ -237,7 +238,7 @@ def main(**kwargs) -> None:
     # Supply path to qgis install location
     QgsApplication.setPrefixPath("/usr/local/bin/", True)
 
-    # Create a reference to the QgsApplication.  Setting the
+    # Create a reference to the QgsApplication. Setting the
     # second argument to False disables the GUI.
     qgs = QgsApplication([], False)
 
@@ -252,7 +253,7 @@ def main(**kwargs) -> None:
         )
         logger.info(f"Partitioned {src.name}")
 
-    # print(max(memory_usage(split)))
+    logger.info("Partitioning finished. Creating project ...")
 
     project = QgsProject.instance()
 
@@ -267,9 +268,7 @@ def main(**kwargs) -> None:
 
     project.write(f"{outdir}/ecogis.qgz")
 
-    # Finally, exitQgis() is called to remove the
-    # provider and layer registries from memory
-    qgs.exitQgis()
+    logger.info("Project created!")
 
 
 if __name__ == "__main__":
@@ -298,9 +297,21 @@ if __name__ == "__main__":
         type=str,
         default="debug",
         choices=["debug", "info", "warn", "error"],
+        help="Determine what type of information should be logged",
     )
-    parser.add_argument("-q", "--quiet", action="count", default=0)
-    parser.add_argument("-np", "--no-progress", action="store_true")
+    parser.add_argument(
+        "-q",
+        "--quiet",
+        action="count",
+        default=0,
+        help="Lower the amount of information displayed (-qq will stop almost all output)",
+    )
+    parser.add_argument(
+        "-np",
+        "--no-progress",
+        action="store_true",
+        help="Don't display any progress bars",
+    )
 
     args = parser.parse_args()
 
