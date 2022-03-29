@@ -139,17 +139,22 @@ class Layer:
         self.layer = layer
 
     def partition(self, partition: Partition, name: str):
-        os.mkdir(name)
+        dir = Path(name)
+        if dir.exists():
+            logging.getLogger(ECOGIS_LOGGER).error(f"{name} already exists")
+            return []
+
+        dir.mkdir(parents=True)
         partition.set_layer(self.layer)
 
         partitions: Dict[str, Tuple[ogr.DataSource, ogr.Layer]] = {}
         for key in partition.layer_names():
-            path = f"{name}/{key}.fgb"
-            if os.path.exists(path):
-                os.remove(path)
+            path = dir.joinpath(Path(f"{key}.fgb"))
+            if path.exists():
+                os.remove(str(path))
 
             driver: ogr.Driver = ogr.GetDriverByName("FlatGeobuf")
-            ds: ogr.DataSource = driver.CreateDataSource(path)
+            ds: ogr.DataSource = driver.CreateDataSource(str(path))
             out_layer: ogr.Layer = ds.CreateLayer(f"{key}", self.layer.GetSpatialRef())
 
             defn: ogr.FeatureDefn = out_layer.GetLayerDefn()
@@ -184,8 +189,12 @@ class Source:
         self.name = name
 
     @staticmethod
-    def from_file(file: str, name: str) -> Source:
+    def from_file(file: str, name: str) -> Optional[Source]:
         data_source: ogr.DataSource = ogr.Open(file)
+
+        if data_source is None:
+            logging.getLogger(ECOGIS_LOGGER).error(f"Invalid shapefile: {file}")
+            return None
 
         return Source(data_source.GetDriver(), data_source, name)
 
@@ -223,14 +232,14 @@ def main(**kwargs) -> None:
         else:
             os.remove(outdir)
 
-    os.mkdir(outdir)
+    Path(outdir).mkdir()
 
     shapefiles: List[str] = []
 
     for path, _, files in os.walk(indir):
         for file in files:
             if shape_file_regex.fullmatch(file):
-                name = os.path.join(outdir, Path(file).stem)
+                name = os.path.join(outdir, os.path.relpath(os.path.join(path, Path(file).stem), indir))
                 shapefiles.append((os.path.join(path, file), name))
 
     logger.info("Done!")
@@ -248,6 +257,9 @@ def main(**kwargs) -> None:
     partitions = []
 
     for src in starmap(Source.from_file, shapefiles):
+        if src is None:
+            continue
+
         partitions.extend(
             (src.name, part) for part in src.partition(LatLonPartition(count))
         )
@@ -326,6 +338,8 @@ if __name__ == "__main__":
     logging.basicConfig(level=args.log_level.upper())
     # GDAL sometimes logs a lot of information, which may be useful, but isn't useful for us
     gdal.SetConfigOption("CPL_LOG", "/dev/null")
+    # Occassionally some of the shapefiles will come with non-existent or corrupted SHX files
+    gdal.SetConfigOption("SHAPE_RESTORE_SHX", "YES")
 
     args = {"indir": args.input, "outdir": args.output, "layers": args.layers}
 
