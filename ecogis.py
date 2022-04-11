@@ -13,11 +13,13 @@ from pathlib import Path
 
 from tqdm import tqdm, trange
 from osgeo import ogr, gdal
-from qgis.core import QgsProject, QgsVectorLayer, QgsApplication
+from qgis.core import QgsProject, QgsVectorLayer, QgsApplication, QgsCoordinateReferenceSystem, QgsSettings
 
 ECOGIS_LOGGER = "ecogis"
 # `None` is basically the same as `False`, just doesn't enable it if the output isn't a TTY
 DISABLE_PROGRESS = None
+
+DEFAULT_CRS = 3857
 
 
 class Partition:
@@ -147,6 +149,11 @@ class Layer:
         dir.mkdir(parents=True)
         partition.set_layer(self.layer)
 
+        srs: ogr.osr.SpatialReference = ogr.osr.SpatialReference()
+        if srs.ImportFromEPSG(DEFAULT_CRS):
+            logging.error("Unable to generate SRS")
+            return []
+
         partitions: Dict[str, Tuple[ogr.DataSource, ogr.Layer]] = {}
         for key in partition.layer_names():
             path = dir.joinpath(Path(f"{key}.fgb"))
@@ -155,7 +162,8 @@ class Layer:
 
             driver: ogr.Driver = ogr.GetDriverByName("FlatGeobuf")
             ds: ogr.DataSource = driver.CreateDataSource(str(path))
-            out_layer: ogr.Layer = ds.CreateLayer(f"{key}", self.layer.GetSpatialRef())
+            out_layer: ogr.Layer = ds.CreateLayer(
+                f"{key}", srs, self.layer.GetLayerDefn().GetGeomType())
 
             defn: ogr.FeatureDefn = out_layer.GetLayerDefn()
             for idx in range(defn.GetFieldCount()):
@@ -193,7 +201,8 @@ class Source:
         data_source: ogr.DataSource = ogr.Open(file)
 
         if data_source is None:
-            logging.getLogger(ECOGIS_LOGGER).error(f"Invalid shapefile: {file}")
+            logging.getLogger(ECOGIS_LOGGER).error(
+                f"Invalid shapefile: {file}")
             return None
 
         return Source(data_source.GetDriver(), data_source, name)
@@ -239,7 +248,8 @@ def main(**kwargs) -> None:
     for path, _, files in os.walk(indir):
         for file in files:
             if shape_file_regex.fullmatch(file):
-                name = os.path.join(outdir, os.path.relpath(os.path.join(path, Path(file).stem), indir))
+                name = os.path.join(outdir, os.path.relpath(
+                    os.path.join(path, Path(file).stem), indir))
                 shapefiles.append((os.path.join(path, file), name))
 
     logger.info("Done!")
@@ -268,6 +278,8 @@ def main(**kwargs) -> None:
     logger.info("Partitioning finished. Creating project ...")
 
     project = QgsProject.instance()
+    crs = QgsCoordinateReferenceSystem.fromEpsgId(DEFAULT_CRS)
+    project.setCrs(crs)
 
     for (part, key) in partitions:
         path = os.path.abspath(os.path.join(os.curdir, f"{part}/{key}.fgb"))
@@ -284,7 +296,8 @@ def main(**kwargs) -> None:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(prog="EcoGis", description="Ecogy GIS Tools")
+    parser = argparse.ArgumentParser(
+        prog="EcoGis", description="Ecogy GIS Tools")
 
     parser.add_argument(
         "input", type=str, help="The directory to traverse for the input files"
