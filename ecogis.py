@@ -255,7 +255,7 @@ def main(**kwargs) -> None:
     logger.info("Done!")
 
     # Supply path to qgis install location
-    QgsApplication.setPrefixPath("/usr/local/bin/", True)
+    QgsApplication.setPrefixPath("/usr/bin", True)
 
     # Create a reference to the QgsApplication. Setting the
     # second argument to False disables the GUI.

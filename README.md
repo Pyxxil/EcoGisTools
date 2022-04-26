@@ -34,3 +34,7 @@ Go to:
  5. Click "Apply", and then "OK"
  6. Save the file
  7. Close QGIS, and now the project is ready to be used with QGIS server
+
+## FAQ
+1. Why do I get so many "Invalid Layers"?
+   * This is likely either becuase you don't have qgis installed, or the path in which it is installed is not `/usr/bin`. If it's the latter, you can manually edit the prefix used for qgis to the path for it in `ecogis.py`, on the line that looks like this: `QgsApplication.setPrefixPath("/usr/bin/", True)`. Edit the first parameter to whatever the prefix is (you can find this by entering `which qgis` in your shell)
