@@ -11,7 +11,6 @@ import argparse
 from math import ceil, floor
 from pathlib import Path
 
-import osgeo.osr
 from tqdm import tqdm, trange
 from osgeo import ogr, gdal
 from qgis.core import QgsProject, QgsVectorLayer, QgsApplication, QgsCoordinateReferenceSystem, QgsSettings
@@ -280,7 +279,6 @@ def main(**kwargs) -> None:
     for (part, key) in partitions:
         path = os.path.abspath(os.path.join(os.curdir, f"{part}/{key}.fgb"))
         layer = QgsVectorLayer(path, key, "ogr")
-        layer_crs = layer.crs()
         if not layer.isValid():
             logger.error(f"Invalid layer: {key} ({path})")
             continue
