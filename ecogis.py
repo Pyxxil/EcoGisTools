@@ -149,11 +149,6 @@ class Layer:
         dir.mkdir(parents=True)
         partition.set_layer(self.layer)
 
-        srs: ogr.osr.SpatialReference = ogr.osr.SpatialReference()
-        if srs.ImportFromEPSG(DEFAULT_CRS):
-            logging.error("Unable to generate SRS")
-            return []
-
         partitions: Dict[str, Tuple[ogr.DataSource, ogr.Layer]] = {}
         for key in partition.layer_names():
             path = dir.joinpath(Path(f"{key}.fgb"))
@@ -163,7 +158,7 @@ class Layer:
             driver: ogr.Driver = ogr.GetDriverByName("FlatGeobuf")
             ds: ogr.DataSource = driver.CreateDataSource(str(path))
             out_layer: ogr.Layer = ds.CreateLayer(
-                f"{key}", srs, self.layer.GetLayerDefn().GetGeomType())
+                f"{key}", self.layer.GetSpatialRef(), self.layer.GetLayerDefn().GetGeomType())
 
             defn: ogr.FeatureDefn = out_layer.GetLayerDefn()
             for idx in range(defn.GetFieldCount()):
