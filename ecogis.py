@@ -11,6 +11,7 @@ import argparse
 from math import ceil, floor
 from pathlib import Path
 
+import osgeo.osr
 from tqdm import tqdm, trange
 from osgeo import ogr, gdal
 from qgis.core import QgsProject, QgsVectorLayer, QgsApplication, QgsCoordinateReferenceSystem, QgsSettings
@@ -149,11 +150,6 @@ class Layer:
         dir.mkdir(parents=True)
         partition.set_layer(self.layer)
 
-        srs: ogr.osr.SpatialReference = ogr.osr.SpatialReference()
-        if srs.ImportFromEPSG(DEFAULT_CRS):
-            logging.error("Unable to generate SRS")
-            return []
-
         partitions: Dict[str, Tuple[ogr.DataSource, ogr.Layer]] = {}
         for key in partition.layer_names():
             path = dir.joinpath(Path(f"{key}.fgb"))
@@ -163,7 +159,7 @@ class Layer:
             driver: ogr.Driver = ogr.GetDriverByName("FlatGeobuf")
             ds: ogr.DataSource = driver.CreateDataSource(str(path))
             out_layer: ogr.Layer = ds.CreateLayer(
-                f"{key}", srs, self.layer.GetLayerDefn().GetGeomType())
+                f"{key}", self.layer.GetSpatialRef(), self.layer.GetLayerDefn().GetGeomType())
 
             defn: ogr.FeatureDefn = out_layer.GetLayerDefn()
             for idx in range(defn.GetFieldCount()):
@@ -284,6 +280,7 @@ def main(**kwargs) -> None:
     for (part, key) in partitions:
         path = os.path.abspath(os.path.join(os.curdir, f"{part}/{key}.fgb"))
         layer = QgsVectorLayer(path, key, "ogr")
+        layer_crs = layer.crs()
         if not layer.isValid():
             logger.error(f"Invalid layer: {key} ({path})")
             continue
