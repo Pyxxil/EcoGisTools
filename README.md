@@ -14,7 +14,7 @@ partition them into seperate layers, and write them to a directory called `out` 
 
 All options can be seen by running `./ecogis.py -h`.
 
-Once run, the output directory will contain a `ecogis.qgz` QGIS project file. Opening this file in QGIS will load
+Once run, the output directory will contain a `ecogis.qgz` QGIS project file (by default this will be flatgeobuf format). Opening this file in QGIS will load
 all of the layers created by the program.
 
 ### QGIS Server
